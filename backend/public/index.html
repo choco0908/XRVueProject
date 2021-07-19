@@ -1,0 +1,345 @@
+<html>
+
+<head>
+    <style type="text/css">
+        .hidden {
+            height: 100%;
+            min-height: 100%;
+            overflow: hidden !important;
+            touch-action: none;
+        }
+    </style>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-particle-system-component@1.0.x/dist/aframe-particle-system-component.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.1/dist/aframe-extras.min.js"></script>
+    <script src="https://unpkg.com/aframe-gradient-sky@1.0.4/dist/gradientsky.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/javascripts/joystic.js"></script>
+    <script>
+        // Component to change to a sequential color on click.
+        /*AFRAME.registerComponent('cursor-listener', {
+            init: function () {
+                this.el.addEventListener('click', function (evt) {
+                    console.log(evt.detail.intersection.point);
+                    this.setAttribute('visible', false);
+                });
+            }
+        });*/
+    </script>
+</head>
+
+<body class="hidden">
+    <div style="width:100%; height:60%;">
+        <a-scene id="scene" embedded>
+            <a-assets>
+                <a-asset-item id="woman"
+                    src="https://cdn.glitch.com/ab997f9d-4318-48ff-8411-dd95e9efbcf2%2Fwooman.glb?v=1625667322099">
+                </a-asset-item>
+                <a-asset-item id="man"
+                    src="https://cdn.glitch.com/ab997f9d-4318-48ff-8411-dd95e9efbcf2%2Fman.glb?v=1625667336453">
+                </a-asset-item>
+                <a-asset-item id="tinycity"
+                    src="https://cdn.glitch.com/ab997f9d-4318-48ff-8411-dd95e9efbcf2%2Fscene.gltf?v=1626014170937">
+                </a-asset-item>
+                <a-asset-item id="santa"
+                    src="https://cdn.glitch.com/ab997f9d-4318-48ff-8411-dd95e9efbcf2%2Fsanta.gltf?v=1626015182547">
+                </a-asset-item>
+            </a-assets>
+            <a-camera id="camera" look-controls position="-1 1 0">
+                <a-entity cursor="fuse: true; fuseTimeout: 500" position="0 0 -1"
+                    geometry="primitive: ring; radiusInner: 0.005; radiusOuter: 0.01"
+                    material="color: black; shader: flat">
+                </a-entity>
+            </a-camera>
+            <a-entity id="city" gltf-model="#tinycity" position="3 1.1 2.5" scale="0.01 0.01 0.01"></a-entity>
+            <a-entity id="sky" geometry="primitive: sphere; radius: 5000" scale="-1 1 1"></a-entity>
+        </a-scene>
+    </div>
+    <div style="width:100%; height:40%;display: flex; justify-content: space-between;">
+        <div id="joyDivDir" style="width:150px;height:150px;margin:auto 20;"></div>
+        <div id="joyDivAngle" style="width:150px;height:150px;margin:auto 20;"></div>
+    </div>
+</body>
+<script>
+    let scene = document.getElementById("a-scene");
+    // Create JoyStick object into the DIV 'joyDiv'
+    let joydir = new JoyStick('joyDivDir');
+    let joyangle = new JoyStick('joyDivAngle');
+    let angleSpeed = 10;
+    let camera = document.getElementById("camera");
+    const charStrings = ["woman", "man", "santa"];
+
+    let direction;
+    let xvalue = -1;
+    let yvalue = 0;
+    let zvalue = -1;
+    let anglev = 180;
+
+    function User(id, x, y, z, ang, idx) {
+        this.id = id;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.ang = ang;
+        this.idx = idx;
+    }
+
+    let users = [];
+    let userMap = {};
+    let myId;
+
+    function join(id, x, y, z, ang, idx) {
+        let user = new User(id, x, y, z, ang, idx);
+        appendObject(id, x, y, z, ang, idx);
+        users.push(user);
+        userMap[id] = user;
+
+        return user;
+    }
+
+    function leave(id) {
+        for (let i = 0; i < users.length; i++) {
+            if (users[i].id == id) {
+                users.splice(i, 1);
+                break;
+            }
+        }
+        delete userMap[id];
+        while (true) {
+            const el = document.getElementById(id);
+            if (!el)
+                break;
+            console.log(id + 'is removed');
+            el.parentNode.removeChild(el);
+        }
+    }
+
+    function updateState(id, x, y, z, ang, idx) {
+        let user = userMap[id];
+        if (!user) {
+            return;
+        }
+        user.x = x;
+        user.y = y;
+        user.z = z;
+        user.ang = ang;
+        user.idx = idx;
+    }
+
+    function appendObject(id, x, y, z, ang, idx) {
+        if (document.getElementById(id))
+            return;
+        console.log('append requested by ', id);
+        const pos = {
+            x: x,
+            y: y,
+            z: z
+        };
+        let size = 0.1
+        if (idx < 2)
+            size = 3
+        $('<a-entity />', {
+            id: id,
+            'gltf-model': '#' + charStrings[idx],
+            position: pos, // doesn't seem to do anything, known issue
+            scale: size + " " + size + " " + size,
+            rotation: "0 " + ang + " 0",
+            'animation-mixer': '',
+            appendTo: $('#scene')
+        });
+        document.getElementById(id).setAttribute("position", pos); // this does set position as a workaround
+    }
+
+    let socket = io();
+
+    socket.on("connect", () => {
+        console.log("connection server");
+    });
+
+    socket.on('user_id', function (data) {
+        myId = data;
+        console.log('my id = ', myId);
+    });
+
+    socket.on('join_user', function (data) {
+        console.log('join_user ', data);
+        join(data.id, data.x, data.y, data.z, data.ang, data.idx);
+    });
+
+    socket.on('leave_user', function (data) {
+        leave(data);
+    });
+
+    socket.on('update_state', function (data) {
+        updateState(data.id, data.x, data.y, data.z, data.ang, data.idx);
+    });
+
+    function sendData() {
+        let curUser = userMap[myId];
+        if (!curUser) {
+            return;
+        }
+        let data = {};
+        data = {
+            id: curUser.id,
+            x: curUser.x,
+            y: curUser.y,
+            z: curUser.z,
+            ang: curUser.ang,
+            idx: curUser.idx
+        };
+
+        if (data) {
+            socket.emit('send_location', data);
+        };
+    };
+
+    function render() {
+        for (let i = 0; i < users.length; i++) {
+            let user = users[i];
+            if (user.id == myId)
+                continue;
+            pos = {
+                x: user.x,
+                y: user.y,
+                z: user.z
+            }
+            ang = {
+                x: 0,
+                y: user.ang,
+                z: 0
+            }
+            document.getElementById(user.id).setAttribute("position", pos);
+            document.getElementById(user.id).setAttribute("rotation", ang);
+        }
+
+        let curUser = userMap[myId];
+        if (!curUser)
+            return;
+
+        curUser.x = xvalue;
+        curUser.y = yvalue;
+        curUser.z = zvalue;
+        curUser.ang = anglev;
+
+        sendData();
+    };
+
+    function update() {
+        render();
+    }
+
+    setInterval(update, 10);
+
+    function control() {
+        let curUser = userMap[myId];
+        if (!curUser) {
+            return;
+        }
+        let character = document.getElementById(myId);
+        direction = joydir.GetDir();
+        angle = joyangle.GetDir();
+        if (direction == "C" && angle == "C")
+            return;
+        let position = camera.getAttribute("position");
+        let rotation = character.getAttribute("rotation");
+        let pos_user = character.getAttribute("position");
+        if (direction == "N") { //상
+            pos_user.z -= 0.1;
+
+            position.z -= 0.1;
+            console.log('상 이동');
+        } else if (direction == "NE") { //우상
+            pos_user.z -= 0.05;
+            pos_user.x += 0.05;
+
+            position.z -= 0.05;
+            position.x += 0.05;
+            console.log('우상 이동');
+        } else if (direction == "NW") { //좌상
+            pos_user.z -= 0.05;
+            pos_user.x -= 0.05;
+
+            position.z -= 0.05;
+            position.x -= 0.05;
+            console.log('좌상 이동');
+        } else if (direction == "S") { //후
+            pos_user.z += 0.1;
+
+            position.z += 0.1;
+            console.log('후 이동');
+        } else if (direction == "SE") { //우후
+            pos_user.x += 0.05;
+            pos_user.z += 0.05;
+
+            position.x += 0.05;
+            position.z += 0.05;
+            console.log('우후 이동');
+        } else if (direction == "SW") { //좌후
+            pos_user.x -= 0.05;
+            pos_user.z += 0.05;
+
+            position.x -= 0.05;
+            position.z += 0.05;
+            console.log('좌후 이동');
+        } else if (direction == "W") { //좌
+            console.log('좌 이동');
+            pos_user.x -= 0.1;
+
+            position.x -= 0.1;
+        } else if (direction == "E") { //우
+            console.log('우 이동');
+            pos_user.x += 0.1;
+
+            position.x += 0.1;
+        }
+
+        xvalue = pos_user.x;
+        yvalue = pos_user.y;
+        zvalue = pos_user.z;
+
+        if (angle == "W" || angle == "NW" || angle == "SW") { //좌
+            anglev = rotation.y + (1 * angleSpeed)
+            character.setAttribute('rotation', {
+                x: 0,
+                y: anglev,
+                z: 0
+            });
+            console.log('좌후 회전');
+        } else if (angle == "E" || angle == "SE" || angle == "NE") { //우
+            anglev = rotation.y - (1 * angleSpeed)
+            character.setAttribute('rotation', {
+                x: 0,
+                y: anglev,
+                z: 0
+            });
+            console.log('우 회전');
+        }
+
+    }
+    setInterval(control, 60);
+</script>
+<!--<script>
+    window.onunload = function () {
+      leave(myId);
+    }
+    document.onkeydown = function ( event ) {
+    if ( event.keyCode == 116  // F5
+        || event.ctrlKey == true && (event.keyCode == 82) // ctrl + r
+       ) {
+        //접속 강제 종료
+        leave(myId);
+        // keyevent
+        event.cancelBubble = true; 
+        event.returnValue = false; 
+        setTimeout(() => {
+            window.location.reload();
+        }, 100);
+        return false;
+      }
+  }
+  </script>-->
+
+</html>

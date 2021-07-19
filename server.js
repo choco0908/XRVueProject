@@ -3,9 +3,8 @@
 //require('aframe');
 //require('aframe-super-shooter-kit');
 
-const express = require("express");
 const socket = require("socket.io");
-const app = express();
+const app = require('./backend/app');
 const server = require('http').createServer(app);
 const io = socket(server);
 
@@ -101,6 +100,7 @@ io.on('connection', function(socket) {
 
 // make all the files in 'public' available
 // https://expressjs.com/en/starter/static-files.html
+/*
 app.use(express.static("public/"));
 app.use('/js', express.static(__dirname + '/js'));
 
@@ -113,14 +113,13 @@ app.get("/controller", (request, response) => {
   // express helps us take JS objects and send them as JSON
   response.sendFile(__dirname + "/views/controller.html");
 });
-
+*/
 // listen for requests :)
 /*
 server.listen(process.env.PORT, () => {
   console.log("Your app is listening on port " + process.env.PORT);
 });
 */
-// Debug
 server.listen(3000, () => {
   console.log("Your app is listening on port 3000");
 });
