@@ -4,6 +4,19 @@ import Vue from 'vue'
 import App from './App'
 import router from './router'
 
+import 'aframe'
+
+Vue.config.ignoredElements = [
+  'a-scene',
+  'a-assets',
+  'a-sky',
+  'a-camera',
+  'a-cursor',
+  'a-animation',
+  'a-entity',
+  'a-asset-item'
+]
+
 Vue.config.productionTip = false
 
 /* eslint-disable no-new */
