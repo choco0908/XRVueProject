@@ -1,123 +1,126 @@
-/**
-* This is the main Node.js server script for your project
-* Check out the two endpoints this back-end API provides in fastify.get and fastify.post below
-*/
+// server.js
+// where your node app starts
+//require('aframe');
+//require('aframe-super-shooter-kit');
 
-const path = require("path");
+const express = require("express");
+const socket = require("socket.io");
+const app = express();
+const server = require('http').createServer(app);
+const io = socket(server);
 
-// Require the fastify framework and instantiate it
-const fastify = require("fastify")({
-  // Set this to true for detailed logging:
-  logger: false
-});
+const startX = -1;
+const startY = 0;
+const startZ = -1;
+const startAng = 180;
 
-// ADD FAVORITES ARRAY VARIABLE FROM TODO HERE
-
-
-// Setup our static files
-fastify.register(require("fastify-static"), {
-  root: path.join(__dirname, "public"),
-  prefix: "/" // optional: default '/'
-});
-
-// fastify-formbody lets us parse incoming forms
-fastify.register(require("fastify-formbody"));
-
-// point-of-view is a templating manager for fastify
-fastify.register(require("point-of-view"), {
-  engine: {
-    handlebars: require("handlebars")
+class User{
+  constructor(socket){
+    console.log('User create requested ',socket.id);
+    this.socket = socket;
+    this.x = startX;
+    this.y = startY;
+    this.z = startZ;
+    this.ang = startAng;
+    this.idx = Math.floor(Math.random() * 3);
   }
-});
-
-// Load and parse SEO data
-const seo = require("./src/seo.json");
-if (seo.url === "glitch-default") {
-  seo.url = `https://${process.env.PROJECT_DOMAIN}.glitch.me`;
+  
+  get id() {
+    return this.socket.id;
+  }
 }
 
-/**
-* Our home page route
-*
-* Returns src/pages/index.hbs with data built into it
-*/
-fastify.get("/", function(request, reply) {
-  
-  // params is an object we'll pass to our handlebars template
-  let params = { seo: seo };
-  
-  // If someone clicked the option for a random color it'll be passed in the querystring
-  if (request.query.randomize) {
-    
-    // We need to load our color data file, pick one at random, and add it to the params
-    const colors = require("./src/colors.json");
-    const allColors = Object.keys(colors);
-    let currentColor = allColors[(allColors.length * Math.random()) << 0];
-    
-    // Add the color properties to the params object
-    params = {
-      color: colors[currentColor],
-      colorError: null,
-      seo: seo
-    };
-  }
-  
-  // The Handlebars code will be able to access the parameter values and build them into the page
-  reply.view("/src/pages/index.hbs", params);
-});
+let users = [];
+let userMap = {};
 
-/**
-* Our POST route to handle and react to form submissions 
-*
-* Accepts body data indicating the user choice
-*/
-fastify.post("/", function(request, reply) {
+function join(socket){
+  let user = new User(socket);
   
-  // Build the params object to pass to the template
-  let params = { seo: seo };
+  users.push(user)
+  userMap[socket.id] = user;
   
-  // If the user submitted a color through the form it'll be passed here in the request body
-  let color = request.body.color;
-  
-  // If it's not empty, let's try to find the color
-  if (color) {
-    // ADD CODE FROM TODO HERE TO SAVE SUBMITTED FAVORITES
-    
-    // Load our color data file
-    const colors = require("./src/colors.json");
-    
-    // Take our form submission, remove whitespace, and convert to lowercase
-    color = color.toLowerCase().replace(/\s/g, "");
-    
-    // Now we see if that color is a key in our colors object
-    if (colors[color]) {
-      
-      // Found one!
-      params = {
-        color: colors[color],
-        colorError: null,
-        seo: seo
-      };
-    } else {
-      
-      // No luck! Return the user value as the error property
-      params = {
-        colorError: request.body.color,
-        seo: seo
-      };
+  return user;
+}
+
+function leave(socket){
+  for(let i = 0; i< users.length; i++){
+    if(users[i].id = socket.id){
+      users.splice(i,1);
+      break;
     }
   }
+  delete userMap[socket.id];
+}
+
+io.on('connection', function(socket) {
+  console.log(`${socket.id}님이 입장하였습니다.`);
   
-  // The Handlebars template will use the parameter values to update the page with the chosen color
-  reply.view("/src/pages/index.hbs", params);
+  socket.on('disconnect', function(reason){
+    console.log(`${socket.id}님이 ${reason}의 이유로 퇴장하였습니다.`);
+    leave(socket)
+    socket.broadcast.emit('leave_user', socket.id);
+  });
+  
+  let newUser = join(socket);
+  let charStrings = ["woman","man","santa"];
+  socket.emit('user_id', socket.id);
+  
+  for(let i = 0; i < users.length; i++){
+    let user = users[i];
+    console.log(`${user.id}님의 캐릭터는 ${charStrings[user.idx]}입니다.`);
+    socket.emit('join_user', {
+      id: user.id,
+      x: user.x,
+      y: user.y,
+      z: user.z,
+      ang: user.ang,
+      idx: user.idx
+    });
+  }
+  
+  socket.broadcast.emit('join_user', {
+    id: socket.id,
+    x: newUser.x,
+    y: newUser.y,
+    z: newUser.z,
+    ang: newUser.ang,
+    idx: newUser.idx
+  });
+  
+  socket.on('send_location', function(data){
+    socket.broadcast.emit('update_state', {
+      id: data.id,
+      x: data.x,
+      y: data.y,
+      z: data.z,
+      ang: data.ang,
+      idx: data.idx
+    });
+  })
+})
+
+// make all the files in 'public' available
+// https://expressjs.com/en/starter/static-files.html
+app.use(express.static("public/"));
+app.use('/js', express.static(__dirname + '/js'));
+
+// https://expressjs.com/en/starter/basic-routing.html
+app.get("/", (request, response) => {
+  response.sendFile(__dirname + "/views/controller.html");
 });
 
-// Run the server and report out to the logs
-fastify.listen(process.env.PORT, function(err, address) {
-  if (err) {
-    fastify.log.error(err);
-    process.exit(1);
-  }
-  console.log(`Your app is listening on ${address}`);
-  fastify.log.info(`server listening on ${address}`);
+app.get("/controller", (request, response) => {
+  // express helps us take JS objects and send them as JSON
+  response.sendFile(__dirname + "/views/controller.html");
+});
+
+// listen for requests :)
+/*
+server.listen(process.env.PORT, () => {
+  console.log("Your app is listening on port " + process.env.PORT);
+});
+*/
+// Debug
+server.listen(3000, () => {
+  console.log("Your app is listening on port 3000");
 });

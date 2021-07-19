@@ -1,25 +1,30 @@
 {
   "name": "xrproject-vue",
-  "version": "0.0.1",
-  "description": "A simple Node app built on fastify, instantly up and running.",
+  "version": "1.0.0",
+  "description": "XRProject For WebXR",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/choco0908/XRProjectViaGlitch.git"
+  },
+  "author": "choco0908",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/choco0908/XRProjectViaGlitch/issues"
+  },
+  "homepage": "https://github.com/choco0908/XRProjectViaGlitch#readme",
   "dependencies": {
-    "fastify": "^3.14.1",
-    "fastify-formbody": "^5.0.0",
-    "fastify-static": "^4.0.0",
-    "handlebars": "^4.7.7",
-    "point-of-view": "^4.14.0"
+    "aframe": "^1.2.0",
+    "express": "^4.17.1",
+    "socket.io": "^4.1.2",
+    "socket.io-client": "^4.1.2"
   },
   "engines": {
     "node": "12.x"
   },
-  "repository": {
-    "url": "https://glitch.com/edit/#!/glitch-xrproject-vue"
-  },
-  "license": "MIT",
   "keywords": [
     "node",
     "glitch",
